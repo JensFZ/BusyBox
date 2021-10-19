@@ -1,0 +1,11 @@
+Reference, Value, Footprint, Datasheet
+"D1","LED","LED_THT:LED_D5.0mm","~"
+"R1","R","Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal","~"
+"D2","LED","LED_THT:LED_D5.0mm","~"
+"R2","R","Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal","~"
+"J1","Conn_01x04_Male","Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical","~"
+"U1","NodeMCU_LUA_Amica_V2","ESP8266:NodeMCU-LoLinV3",""
+"SW1","SW_DIP_x03","Button_Switch_THT:SW_DIP_SPSTx03_Slide_9.78x9.8mm_W7.62mm_P2.54mm","~"
+"R3","R","Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal","~"
+"R5","R","Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal","~"
+"R4","R","Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal","~"
