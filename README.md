@@ -4,6 +4,7 @@ In diesen Projekt geht es darum, dass man einen Status einer Website abfragt und
 
 der Web API Code wird demnächst auch hier noch hochgeladen
 
+<img src="https://github.com/JensFZ/BusyBox/raw/master/KiCad/BusyBox.png" width=400">
 
 ## Einrichtung Arduino IDE
 
