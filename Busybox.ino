@@ -14,6 +14,8 @@
 #define dip2 D7
 #define dip1 D4
 
+#define switchState D0
+
 LiquidCrystal_I2C lcd(0x27,16,2); 
 
 void setup() {
@@ -39,6 +41,8 @@ void setup() {
   pinMode(dip3, INPUT);
   pinMode(dip2, INPUT);
   pinMode(dip1, INPUT);
+  
+  pinMode(switchState, INPUT);
   
 
 //  client.setInsecure();
@@ -76,12 +80,22 @@ void setup() {
   lcd.clear();
 }
 
+bool buttonPressed = false;
+
 void loop() {
   unsigned int UserID = 0;
   UserID = (digitalRead(dip3) << 2) + (digitalRead(dip2) << 1) + (digitalRead(dip1));
 
   lcd.setCursor(0,0);
   lcd.print("ID");
+  
+  if(!buttonPressed && digitalRead(switchState)==1) {
+    buttonPressed = true;
+    callhttpsSwitch(UserID);
+    Serial.println("Gedrückt");
+  }else if(digitalRead(switchState)!=1) {
+    buttonPressed = false;
+  }
 
   if(UserID > 0) {
     lcd.setCursor(0,1);
@@ -99,6 +113,8 @@ void loop() {
   
   delay(2000);
 }
+
+void callhttpsSwitch(int UserID) {};
 
 void callhttps(int UserID){
   WiFiClientSecure httpsClient;
@@ -157,7 +173,7 @@ void callhttps(int UserID){
     lcd.setCursor(3,1);
     lcd.print("            ");
     
-  } else {
+  } else if(amTelefon == "true"){
     digitalWrite(ledGreenPin, LOW);   //Turn the LED off
     digitalWrite(ledRedPin, HIGH);   //Turn the LED off
 
