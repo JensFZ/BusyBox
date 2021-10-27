@@ -1,6 +1,6 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
-#include <WiFiClientSecure.h>
+#include <HttpClient.h>
 #include <ArduinoJson.h>
 #include <LiquidCrystal_I2C.h>
 #include "config.h"
@@ -14,10 +14,10 @@
 #define dip2 D7
 #define dip1 D4
 
-#define switchState D0
+#define switchState D3
 
 LiquidCrystal_I2C lcd(0x27,16,2); 
-
+WiFiClient wifiClient;
 void setup() {
   Serial.flush();
 
@@ -43,6 +43,8 @@ void setup() {
   pinMode(dip1, INPUT);
   
   pinMode(switchState, INPUT);
+
+  //attachInterrupt(digitalPinToInterrupt(switchState), callhttpSwitch, RISING);
   
 
 //  client.setInsecure();
@@ -78,131 +80,168 @@ void setup() {
   lcd.print(WiFi.localIP());
   delay(1500);
   lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("ID");
+
 }
 
 bool buttonPressed = false;
 
+bool aktiv = true;
+
+int lastUserID = -1;
+bool lastBacklight = true;
+
+unsigned int UserID = 0;
+
+ 
 void loop() {
-  unsigned int UserID = 0;
   UserID = (digitalRead(dip3) << 2) + (digitalRead(dip2) << 1) + (digitalRead(dip1));
 
-  lcd.setCursor(0,0);
-  lcd.print("ID");
-  
-  if(!buttonPressed && digitalRead(switchState)==1) {
-    buttonPressed = true;
-    callhttpsSwitch(UserID);
-    Serial.println("Gedrückt");
-  }else if(digitalRead(switchState)!=1) {
-    buttonPressed = false;
-  }
+    if(UserID > 0) {
+      if(lastUserID != UserID) {
+        printUserID();
+        lastUserID = UserID;
+      }
+      
+      if(callAktiv()) {
+        if(!lastBacklight) {
+          lcd.backlight();
+          lastBacklight = true;
+          lcd.clear();
+          lcd.setCursor(0,0);
+          lcd.print("ID");
+          printUserID();
 
-  if(UserID > 0) {
-    lcd.setCursor(0,1);
-    lcd.print("   ");
-    lcd.setCursor(0,1);
-    lcd.print(UserID);
+        }
+        callBusy();
+        delay(1000);
+      } else {
+        if(lastBacklight) {
+          lcd.noBacklight();
+          lcd.clear();
+          lastBacklight = false;
+        }
+        digitalWrite(ledGreenPin, LOW);   //Turn the LED off
+        digitalWrite(ledRedPin, LOW);   //Turn the LED off
 
-    callhttps(UserID);
-  } else {
-    lcd.setCursor(0,1);
-    lcd.print("Keine UserID");
-
-    Serial.println("Keine UserID");
-  }
-  
-  delay(2000);
+        delay(30000);
+      }
+    } else {
+      lcd.setCursor(0,1);
+      lcd.print("Keine UserID");
+      Serial.println("Keine UserID");
+      
+      delay(10000);
+    }
 }
 
-void callhttpsSwitch(int UserID) {};
+void callhttpSwitch() {
+  Serial.println("Button");
+};
 
-void callhttps(int UserID){
-  WiFiClientSecure httpsClient;
-  httpsClient.setInsecure();
+void printUserID() {
+  lcd.setCursor(0,1);
+  lcd.print("   ");
+  lcd.setCursor(0,1);
+  lcd.print(UserID);
+}
 
-  if (!httpsClient.connect(host, httpsPort)) {
-    Serial.println("Connection failed");    
-    return;
+
+bool callAktiv() {
+  Serial.println("callAktiv");
+  int err =0;
+  HTTPClient http;
+  
+  String serverPath = serverNameAktiv + UserID;
+  Serial.println(serverPath);
+  
+  http.begin(wifiClient, serverPath);
+  int httpResponseCode = http.GET();
+  if (httpResponseCode>0) {
+    Serial.print("HTTP Response code: ");
+    Serial.println(httpResponseCode);
+    String payload = http.getString();
+    Serial.println(payload);
+
+    const size_t capacity = JSON_ARRAY_SIZE(5) + 5*JSON_OBJECT_SIZE(2) + JSON_OBJECT_SIZE(3) + 200;
+    DynamicJsonDocument doc(capacity);
+    deserializeJson(doc, payload);
+    String Aktiv = doc["Aktiv"];
+    Serial.println(Aktiv);
+    return Aktiv == "true";
   }
 
+  return false;
+}
+
+void callBusy(){
+  int err =0;
+  HTTPClient http;
   Serial.println(String("UserID: ") + UserID);
-  httpsClient.println(String("GET ") + url + UserID + " HTTP/1.0\r\n" + "Host: " + host + "\r\nConnection: close\r\n"); // HTTP 1.0 pour éviter les réponses découpées (chunked) / Use HTTP 1.0 to avoid chunked answers
-  if (httpsClient.println() == 0) {
-    Serial.println(F("ERROR : Failed to send request"));  
-    return;
-  }
+  String serverPath = serverNameBusy + UserID;
+
+  Serial.println(serverPath);
+  http.begin(wifiClient, serverPath);
+
+  int httpResponseCode = http.GET();
+  if (httpResponseCode>0) {
+    Serial.print("HTTP Response code: ");
+    Serial.println(httpResponseCode);
+    String payload = http.getString();
+    Serial.println(payload);
+
+    const size_t capacity = JSON_ARRAY_SIZE(5) + 5*JSON_OBJECT_SIZE(2) + JSON_OBJECT_SIZE(3) + 200;
+    DynamicJsonDocument doc(capacity);
+    deserializeJson(doc, payload);
+
+    String amTelefon = doc["amTelefon"];
+    Serial.println("amTelefon: " + amTelefon);
+    if(amTelefon == "false") {
+      digitalWrite(ledGreenPin, HIGH);   //Turn the LED off
+      digitalWrite(ledRedPin, LOW);   //Turn the LED off
   
-  Serial.println(F("OK : Request sent"));
-  int Retry = 0;
-  while (httpsClient.connected() && Retry <= 15)  // Get header: "OK 200... " ==> need to add  header validity check (err 404, etc)
-  {
-    String line = httpsClient.readStringUntil('\n');
-    if (line == "\r")
-    {
-      Serial.println("headers received");
-      break;
-    }
-    Retry++;
-  }
-
-  String payload = "";
-  Retry = 0;
-  while (httpsClient.available() && Retry <= 1000)   // FOR NOW, JUST PRINT RECEIVED RAW JSON FILE, BUF FILE IS NOT COMPLETE !! (+/-1440 chars out of +/-54151 chars)
-  {
-    char c = httpsClient.read();
-    payload.concat(c);
-    Retry++;
-  }
-
-  // Disconnect
-  httpsClient.stop();
-
-  const size_t capacity = JSON_ARRAY_SIZE(5) + 5*JSON_OBJECT_SIZE(2) + JSON_OBJECT_SIZE(3) + 200;
-  DynamicJsonDocument doc(capacity);
-  deserializeJson(doc, payload);
+      lcd.setCursor(3,0);
+      lcd.print("      ");
+      lcd.setCursor(3,1);
+      lcd.print("            ");
+      
+    } else if(amTelefon == "true"){
+      digitalWrite(ledGreenPin, LOW);   //Turn the LED off
+      digitalWrite(ledRedPin, HIGH);   //Turn the LED off
   
-  String amTelefon = doc["amTelefon"];
-  Serial.println("amTelefon: " + amTelefon);
+      char Zeit[20];
+      int Total = doc["seit"];
+      int Tage = Total / 86400;
+      Total = Total % 86400;
+      int Stunden = Total / 3600;
+      Total = Total % 3600;
+      int Minuten = Total / 60;
+      int Sekunden = Total % 60;
+      
+      Serial.println("Tage: " + String(Tage));
+      Serial.println("Stunden: " + String(Stunden));
+      Serial.println("Minuten: " + String(Minuten));
+      Serial.println("Sekunden: " + String(Sekunden));
   
-  if(amTelefon == "false") {
-    digitalWrite(ledGreenPin, HIGH);   //Turn the LED off
-    digitalWrite(ledRedPin, LOW);   //Turn the LED off
-
-    lcd.setCursor(3,0);
-    lcd.print("      ");
-    lcd.setCursor(3,1);
-    lcd.print("            ");
+      if(Tage > 0) {
+        sprintf(Zeit, "%01d:%02d:%02d:%02d", Tage, Stunden, Minuten, Sekunden);
+      } else if(Stunden > 0) {
+        sprintf(Zeit, "%02d:%02d:%02d", Stunden, Minuten, Sekunden);
+      } else {
+        sprintf(Zeit, "%02d:%02d", Minuten, Sekunden);
+      }
+  
+      lcd.setCursor(3,0);
+      lcd.print("| Zeit");
+      lcd.setCursor(3,1);
+      lcd.print("| " + String(Zeit));
     
-  } else if(amTelefon == "true"){
-    digitalWrite(ledGreenPin, LOW);   //Turn the LED off
-    digitalWrite(ledRedPin, HIGH);   //Turn the LED off
-
-    char Zeit[20];
-    int Total = doc["seit"];
-    int Tage = Total / 86400;
-    Total = Total % 86400;
-    int Stunden = Total / 3600;
-    Total = Total % 3600;
-    int Minuten = Total / 60;
-    int Sekunden = Total % 60;
-    
-    Serial.println("Tage: " + String(Tage));
-    Serial.println("Stunden: " + String(Stunden));
-    Serial.println("Minuten: " + String(Minuten));
-    Serial.println("Sekunden: " + String(Sekunden));
-
-    if(Tage > 0) {
-      sprintf(Zeit, "%01d:%02d:%02d:%02d", Tage, Stunden, Minuten, Sekunden);
-    } else if(Stunden > 0) {
-      sprintf(Zeit, "%02d:%02d:%02d", Stunden, Minuten, Sekunden);
-    } else {
-      sprintf(Zeit, "%02d:%02d", Minuten, Sekunden);
     }
-
-    lcd.setCursor(3,0);
-    lcd.print("| Zeit");
-    lcd.setCursor(3,1);
-    lcd.print("| " + String(Zeit));
-
+        
+  } else {
+    Serial.print("Error code: ");
+    Serial.println(httpResponseCode);
   }
+  http.end();
 }
